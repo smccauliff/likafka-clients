@@ -44,8 +44,11 @@ dependencies {
     compile 'org.scala-lang:scala-library:2.10.4'
     compile 'org.apache.zookeeper:zookeeper:3.4.6'
     compile 'org.bouncycastle:bcpkix-jdk15on:1.54'
+    compile group: 'net.sf.trove4j', name: 'trove4j', version: '3.0.3'
+    compile group: 'com.google.guava', name: 'guava', version: '20.0'
 
-    testCompile "org.scala-lang:scala-library:2.10.4"
+
+  testCompile "org.scala-lang:scala-library:2.10.4"
     testCompile 'org.testng:testng:6.8.8'
 }
 
