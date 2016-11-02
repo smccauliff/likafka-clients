@@ -8,15 +8,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.TreeMap;
 import java.util.function.IntFunction;
 
 
 public class MapBenchmark {
   private static final Random rand = new Random(4544544402L);
   private static final byte[] value = new byte[0];
-  private static final int ITEM_COUNT = 20;
-  private static final int MAP_COUNT = 1_000_000;
-  private static char[][] keys = new char[][] {
+  private static final int ITEM_COUNT_MAX = 20;
+  private static final int TEST_COUNT_MAX = 1_000_000;
+  static char[][] keys = new char[][] {
     "linkedin.consumer.class".toCharArray(),
       "kafka.feature1".toCharArray(),
       "kafka.feature2".toCharArray(),
@@ -39,6 +40,8 @@ public class MapBenchmark {
       "header-19".toCharArray()
   };
 
+  private static int nextStringIndex = 0;
+
   public static void main(String[] argv) throws Exception {
     System.out.println("Warmup");
     for (int i=0; i < 100_000; i++) {
@@ -47,33 +50,42 @@ public class MapBenchmark {
       createISM(10);
       createISMPreSorted(10);
       createList(10);
-      createHashMapString(ITEM_COUNT);
+      createHashMapString(ITEM_COUNT_MAX, 10);
+      createTreeMap(10);
+      createTreeMapString(10);
     }
 
-    System.out.println("HashMap String");
-    measureMap(MapBenchmark::createHashMapString);
+    System.out.println("TreeMap");
+    measureMap(MapBenchmark::createTreeMap);
+    System.out.println("TreeMap String");
+    measureMap(MapBenchmark::createTreeMapString);
+    System.out.println("HashMap String preallocate 64");
+    measureMap(count -> createHashMapString(count, 64));
+    System.out.println("HashMap String preallocate 10");
+    measureMap(count -> createHashMapString(count, 10));
+
     System.out.println("HashMap.");
     measureMap(MapBenchmark::createHashMap);
-    System.out.println("Trove IntObjectHashMap");
-    measureMap(MapBenchmark::createIntObjectHashMap);
-    System.out.println("Guava ImmutableSortedMap");
-    measureMap(MapBenchmark::createISM);
-    System.out.println("Guava ImmutableSortedMap presorted");
-    measureMap(MapBenchmark::createISMPreSorted);
+//    System.out.println("Trove IntObjectHashMap");
+//    measureMap(MapBenchmark::createIntObjectHashMap);
+//    System.out.println("Guava ImmutableSortedMap");
+//    measureMap(MapBenchmark::createISM);
+//    System.out.println("Guava ImmutableSortedMap presorted");
+//    measureMap(MapBenchmark::createISMPreSorted);
     System.out.println("ArrayList");
     measureMap(MapBenchmark::createList);
 
   }
 
-  private static <T> void measureMap(IntFunction<T> createMap) {
-    for (int itemCount=1; itemCount <= ITEM_COUNT; itemCount++) {
+  static <T> void measureMap(IntFunction<T> doSomething) {
+    for (int itemCount=1; itemCount <= ITEM_COUNT_MAX; itemCount++) {
       long startTime = System.currentTimeMillis();
-      for (int i=0; i < MAP_COUNT; i++) {
-        createMap.apply(itemCount);
+      for (int i=0; i < TEST_COUNT_MAX; i++) {
+        doSomething.apply(itemCount);
       }
       long endTime = System.currentTimeMillis();
-      double elaspedTime = endTime - startTime;
-      double millisPerMap = (elaspedTime / MAP_COUNT);
+      double elapsedTime = endTime - startTime;
+      double millisPerMap = (elapsedTime / TEST_COUNT_MAX);
       System.out.println(itemCount + "," + millisPerMap);
     }
   }
@@ -81,10 +93,21 @@ public class MapBenchmark {
     return (itemNumber & 1) == 0 ? itemNumber  + 100000 : itemNumber;
   }
 
-  private static Map<FakeString, byte[]> createHashMapString(int itemCount) {
-    Map<FakeString, byte[]> m = new HashMap<>();
+  private static Map<FakeString, byte[]> createHashMapString(int itemCount, int allocationSize) {
+    Map<FakeString, byte[]> m = new HashMap<>(allocationSize);
     for (int i=0; i < itemCount; i++) {
-      FakeString key = new FakeString(keys[i]);
+      int keyIndex = nextStringIndex++ % keys.length;
+      FakeString key = new FakeString(keys[keyIndex]);
+      m.put(key, value);
+    }
+    return m;
+  }
+
+  private static TreeMap<FakeString, byte[]> createTreeMapString(int itemCount) {
+    TreeMap<FakeString, byte[]> m = new TreeMap<>();
+    for (int i=0; i < itemCount; i++) {
+      int keyIndex = nextStringIndex++ % keys.length;
+      FakeString key = new FakeString(keys[keyIndex]);
       m.put(key, value);
     }
     return m;
@@ -134,8 +157,17 @@ public class MapBenchmark {
     return a;
   }
 
+  private static TreeMap<Integer, byte[]> createTreeMap(int itemCount) {
+    TreeMap<Integer, byte[]> m = new TreeMap<>();
+    for (int i=0; i < itemCount; i++) {
+      int key = key(i);
+      m.put(key, value);
+    }
+    return m;
+  }
 
-  private static final class Header<K, V> {
+
+  static final class Header<K, V> {
     final K key;
     final V value;
 
@@ -148,12 +180,17 @@ public class MapBenchmark {
   /**
    * java.lang.String caches the results of hashCode and passes it along to new String(String).
    */
-  private static final class FakeString {
+  private static final class FakeString implements Comparable<FakeString> {
     private int hashCode = 0;
     private final char[] data;
 
     FakeString(char[] data) {
       this.data = data;
+    }
+
+    FakeString(FakeString other) {
+      this.data = other.data;
+      this.hashCode = other.hashCode;
     }
 
     @Override
@@ -162,15 +199,14 @@ public class MapBenchmark {
         return true;
       }
       if (anObject instanceof FakeString) {
-        FakeString anotherString = (FakeString)anObject;
+        FakeString anotherString = (FakeString) anObject;
         int n = value.length;
         if (n == anotherString.data.length) {
           char v1[] = data;
           char v2[] = anotherString.data;
           int i = 0;
           while (n-- != 0) {
-            if (v1[i] != v2[i])
-              return false;
+            if (v1[i] != v2[i]) return false;
             i++;
           }
           return true;
@@ -189,6 +225,26 @@ public class MapBenchmark {
         hashCode = h;
       }
       return h;
+    }
+
+    @Override
+    public int compareTo(FakeString anotherString) {
+      int len1 = data.length;
+      int len2 = anotherString.data.length;
+      int lim = Math.min(len1, len2);
+      char v1[] = data;
+      char v2[] = anotherString.data;
+
+      int k = 0;
+      while (k < lim) {
+        char c1 = v1[k];
+        char c2 = v2[k];
+        if (c1 != c2) {
+          return c1 - c2;
+        }
+        k++;
+      }
+      return len1 - len2;
     }
   }
 }
