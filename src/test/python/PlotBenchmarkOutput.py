@@ -2,8 +2,6 @@ import numpy as np
 
 
 from matplotlib import pyplot as plt
-import csv
-from io import StringIO
 import sys
 
 def parseResultsFile(fileName) :

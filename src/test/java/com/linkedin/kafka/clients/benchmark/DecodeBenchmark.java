@@ -2,16 +2,12 @@ package com.linkedin.kafka.clients.benchmark;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Supplier;
+import org.apache.commons.math3.random.MersenneTwister;
 
 import static com.linkedin.kafka.clients.benchmark.MapBenchmark.keys;
 import static com.linkedin.kafka.clients.benchmark.MapBenchmark.measureMap;
@@ -36,7 +32,8 @@ public class DecodeBenchmark {
   private static final int TEST_COUNT = 1_000_000;
   private static final int PERMUTATION_COUNT = 31;
   private static final int[][] permutations = new int[PERMUTATION_COUNT][];
-  private static final Random random = new Random();
+  //private static final Random random = new Random();
+  private static final MersenneTwister random = new MersenneTwister(499499394404L);
   private static final Charset utf8Charset = Charset.forName("UTF8");
   private static final String[] keysAsString = Arrays.stream(keys).map(a -> new String(a)).toArray(String[]::new);
 
@@ -70,6 +67,7 @@ public class DecodeBenchmark {
         permutations[permutationIndex][keyIndex] = keyIndex;
       }
       fisherYeatesShuffle(permutations[permutationIndex]);
+      System.out.println("Permutation " + permutationIndex + ": " + Arrays.toString(permutations[permutationIndex]));
     }
   }
 
@@ -80,7 +78,7 @@ public class DecodeBenchmark {
       int oldLimit = bbuf.limit();
       bbuf.limit(bbuf.position() + keyLength);
       String key = utf8Charset.decode(bbuf).toString();
-      key.intern();
+      //key.intern();
       bbuf.limit(oldLimit);
       int valueLength = bbuf.getInt();
       byte[] value = new byte[valueLength];
@@ -152,6 +150,9 @@ public class DecodeBenchmark {
     serializedHeader.position(0);
     serializedHeader.limit(serializedHeader.capacity());
     parseStringHeader(serializedHeader, m, itemCount);
+    if (m.size() != itemCount) {
+      throw new IllegalStateException("Invalid header count");
+    }
     int[] permutedKeyIndices = permutations[roundRobinPermutations++ % PERMUTATION_COUNT];
     boolean foundSomething = false;
     for (int keyIndex = 0; keyIndex < keys.length; keyIndex++) {
@@ -162,87 +163,5 @@ public class DecodeBenchmark {
       throw new IllegalStateException("Should have found something in map.");
     }
     return null;
-  }
-
-  /**
-   * This class is a real hack to make testing easier. Please don't use this for anything real... ever.
-   * @param <K>
-   * @param <V>
-   */
-  private static final class ListMap<K, V> implements Map<K, V> {
-
-    private final List<MapBenchmark.Header<K, V>> backingList = new ArrayList<>();
-
-    public ListMap() {
-
-    }
-
-    @Override
-    public int size() {
-      //This does not check for duplicates
-      return backingList.size();
-    }
-
-    @Override
-    public boolean isEmpty() {
-      return backingList.isEmpty();
-    }
-
-    @Override
-    public boolean containsKey(Object key) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean containsValue(Object value) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public V get(Object key) {
-      //searching backwards means we get the last value that was put for some key
-      for (int i=backingList.size()-1; i >= 0; i--) {
-        if (backingList.get(i).key.equals(key)) {
-          return backingList.get(i).value;
-        }
-      }
-      return null;
-    }
-
-    @Override
-    public V put(K key, V value) {
-      backingList.add(new MapBenchmark.Header<>(key, value));
-      return null; //this breaks map spec
-    }
-
-    @Override
-    public V remove(Object key) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void putAll(Map<? extends K, ? extends V> m) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void clear() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Set<K> keySet() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Collection<V> values() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Set<Entry<K, V>> entrySet() {
-      throw new UnsupportedOperationException();
-    }
   }
 }
