@@ -29,7 +29,6 @@ public class DecodeBenchmark {
   private static final ByteBuffer[] serializedIntHeaders = new ByteBuffer[keys.length];
   private static int roundRobinKeyIndex = 0;
   private static int roundRobinPermutations = 0;
-  private static final int TEST_COUNT = 1_000_000;
   private static final int PERMUTATION_COUNT = 31;
   private static final int[][] permutations = new int[PERMUTATION_COUNT][];
   //private static final Random random = new Random();
@@ -71,14 +70,16 @@ public class DecodeBenchmark {
     }
   }
 
-  private static Map<String, byte[]> parseStringHeader(ByteBuffer bbuf, Map<String, byte[]> m, int parseLimit) {
+  private static Map<String, byte[]> parseStringHeader(ByteBuffer bbuf, Map<String, byte[]> m, int parseLimit, boolean doIntern) {
     int headerCount = 0;
     while (bbuf.hasRemaining() && headerCount < parseLimit) {
       byte keyLength = bbuf.get();
       int oldLimit = bbuf.limit();
       bbuf.limit(bbuf.position() + keyLength);
       String key = utf8Charset.decode(bbuf).toString();
-      //key.intern();
+      if (doIntern) {
+        key.intern();
+      }
       bbuf.limit(oldLimit);
       int valueLength = bbuf.getInt();
       byte[] value = new byte[valueLength];
@@ -105,12 +106,12 @@ public class DecodeBenchmark {
   public static void main(String[] argv) throws Exception {
     System.out.println("Warmup.");
     for (int i = 0; i < 100_000; i++) {
-      decodeWithString(12, TreeMap::new);
+      decodeWithString(12, TreeMap::new, true);
       decodeWithInt(12, TreeMap::new);
       decodeWithInt(12, HashMap::new);
-      decodeWithString(12, HashMap::new);
+      decodeWithString(12, HashMap::new, false);
       decodeWithInt(12, ListMap::new);
-      decodeWithString(12, ListMap::new);
+      decodeWithString(12, ListMap::new, true);
     }
 
     System.out.println("Integer-TreeMap");
@@ -120,11 +121,17 @@ public class DecodeBenchmark {
     System.out.println("Integer-List");
     measureMap(itemCount -> decodeWithInt(itemCount, ListMap::new));
     System.out.println("String-TreeMap");
-    measureMap(itemCount -> decodeWithString(itemCount, TreeMap::new));
+    measureMap(itemCount -> decodeWithString(itemCount, TreeMap::new, false));
     System.out.println("String-HashMap");
-    measureMap(itemCount -> decodeWithString(itemCount, HashMap::new));
+    measureMap(itemCount -> decodeWithString(itemCount, HashMap::new, false));
     System.out.println("String-List");
-    measureMap(itemCount -> decodeWithString(itemCount, ListMap::new));
+    measureMap(itemCount -> decodeWithString(itemCount, ListMap::new, false));
+    System.out.println("StringIntern-TreeMap");
+    measureMap(itemCount -> decodeWithString(itemCount, TreeMap::new, true));
+    System.out.println("StringIntern-HashMap");
+    measureMap(itemCount -> decodeWithString(itemCount, HashMap::new, true));
+    System.out.println("StringIntern-List");
+    measureMap(itemCount -> decodeWithString(itemCount, ListMap::new, true));
 
   }
 
@@ -136,20 +143,23 @@ public class DecodeBenchmark {
     serializedHeader.limit(serializedHeader.capacity());
     parseIntHeader(serializedHeader, m, itemCount);
     int[] indicesToCheck  = permutations[roundRobinPermutations++ % PERMUTATION_COUNT];
+    boolean foundSomething = false;
     for (int keyIndex = 0; keyIndex < keys.length; keyIndex++) {
       int permutedKey = indicesToCheck[keyIndex];
-      boolean foundSomething = false;
       foundSomething = foundSomething || m.get(key(permutedKey, bbufIndex)) != null;
+    }
+    if (!foundSomething) {
+      throw new IllegalStateException("can't find integer key");
     }
     return null;
   }
 
-  private static Object decodeWithString(int itemCount, Supplier<Map<String, byte[]>> mapFactory) {
+  private static Object decodeWithString(int itemCount, Supplier<Map<String, byte[]>> mapFactory, boolean doIntern) {
     Map<String, byte[]> m = mapFactory.get();
     ByteBuffer serializedHeader = serializedStringHeaders[roundRobinKeyIndex++ % keys.length];
     serializedHeader.position(0);
     serializedHeader.limit(serializedHeader.capacity());
-    parseStringHeader(serializedHeader, m, itemCount);
+    parseStringHeader(serializedHeader, m, itemCount, doIntern);
     if (m.size() != itemCount) {
       throw new IllegalStateException("Invalid header count");
     }

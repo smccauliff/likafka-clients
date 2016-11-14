@@ -3,9 +3,11 @@ package com.linkedin.kafka.clients.benchmark;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.apache.commons.math3.random.MersenneTwister;
 import org.apache.commons.math3.util.MathArrays;
 
@@ -87,21 +89,37 @@ public class StringKeyLengthBenchmark {
 
   public static void main(String[] argv) throws Exception {
     System.out.println("Warmup");
-    runTestCase(1, 2);
+    runTestCase(1, 2, HashMap::new);
+    runTestCase(1, 2, ListMap::new);
     System.out.println("Warmup complete.");
+
+
     for (int keyLength=1; keyLength < 128; keyLength++) {
-      int keyPrefixLength = (int) (keyLength * 0.1);
-      runTestCase(keyPrefixLength, keyLength);
+      int keyPrefixLength = (int) (keyLength * 0.2);
+      runTestCase(keyPrefixLength, keyLength, HashMap::new);
     }
+    for (int keyLength=1; keyLength < 128; keyLength++) {
+      int keyPrefixLength = (int) (keyLength * 0.5);
+      runTestCase(keyPrefixLength, keyLength, HashMap::new);
+    }
+
+//    for (int keyLength=1; keyLength < 128; keyLength++) {
+//      int keyPrefixLength = (int) (keyLength * 0.2);
+//      runTestCase(keyPrefixLength, keyLength, ListMap::new);
+//    }
+//    for (int keyLength=1; keyLength < 128; keyLength++) {
+//      int keyPrefixLength = (int) (keyLength * 0.5);
+//      runTestCase(keyPrefixLength, keyLength, ListMap::new);
+//    }
   }
 
-  private static void runTestCase(int keyPrefixLength, int keyLength) {
+  private static void runTestCase(int keyPrefixLength, int keyLength, Supplier<Map<String, byte[]>> mapFactory) {
     TestCase testCase = testCase(keyPrefixLength, keyLength);
     long startTime = System.currentTimeMillis();
     int serializedHeaderIndex = 0;
     int permutationIndex = 0;
     for (int testIteration = 0; testIteration < TEST_COUNT; testIteration++) {
-      Map<String, byte[]> headerMap = new ListMap<>();
+      Map<String, byte[]> headerMap = mapFactory.get();
       ByteBuffer serializedHeader = testCase.serializedHeaders[serializedHeaderIndex++ % HEADER_COUNT];
       serializedHeader.position(0);
       serializedHeader.limit(serializedHeader.capacity());

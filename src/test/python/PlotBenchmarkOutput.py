@@ -38,7 +38,9 @@ def parseResultsFile(fileName) :
 
 allTests = parseResultsFile(sys.argv[1])
 
-lineStyles = ['-', '--', '.', '-.', ':', ':.', '-:']
+lineStyles = ['-', '--', '.', '-.', ':', ':.']
+from itertools import cycle
+lineCycler = cycle(lineStyles)
 plotArgs = []
 names = []
 for i in range(0, len(allTests)) :
@@ -47,10 +49,10 @@ for i in range(0, len(allTests)) :
     else :
         test = allTests[i]
         test[:,1] = test[:, 1] * 1000 # scale to microseconds
-        plt.plot(test[:,0], test[:,1], lineStyles[int(i/2)%len(lineStyles)])
+        plt.plot(test[:,0], test[:,1], next(lineCycler))
         # plotArgs.extend([itemCount, allTests[i][:,1], ])
 
-plt.legend(names, loc="lower right", fontsize=9)
+plt.legend(names, loc="lower right", fontsize=9, ncol=3)
 plt.ylabel(sys.argv[2])
 plt.xlabel('number of headers')
 plt.gca().set_yscale('log', basey=2)
